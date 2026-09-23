@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `TripPlan` MODIFY `insurancePlanTier` ENUM('ECONOMY', 'STANDARD', 'PREMIUM') NOT NULL DEFAULT 'PREMIUM';

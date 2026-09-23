@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sarabun:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+/* โทนสีหลักของระบบ ปรับให้เป็นสีน้ำเงินอมม่วง (indigo-periwinkle) ตามธีมที่ผู้ใช้กำหนด
+   แทนที่ค่าเริ่มต้นของ Tailwind ทั้งสเกล "blue" เพื่อให้ทุกหน้าที่ใช้ bg-blue-*/text-blue-*/border-blue-*
+   เปลี่ยนสีตามทันทีโดยไม่ต้องแก้ไฟล์ component ทีละไฟล์
+
+   ขยายสเกลตัวอักษรทั้งระบบให้ใหญ่ขึ้นอีก 1.5 เท่าจากขนาดเดิมที่ปรับไว้รอบก่อน
+   (มีผลกับทุกหน้าที่ใช้ text-3xs/2xs/xs/sm/base/... โดยอัตโนมัติ)
+   --text-3xs ใช้แทนป้ายกำกับที่เดิมเป็น text-[10px]/text-[11px] แบบ arbitrary value
+   เพื่อให้ถูกคุมโดย theme เดียวกันแทนที่จะหลุดสเกลไปเป็นขนาดคงที่ */
+@theme {
+  --font-sans: "Inter", "Sarabun", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-blue-50: #eef1fc;
+  --color-blue-100: #dee3f9;
+  --color-blue-200: #c1c9f2;
+  --color-blue-300: #9daae9;
+  --color-blue-400: #7a89de;
+  --color-blue-500: #5f70d2;
+  --color-blue-600: #4c5ec4;
+  --color-blue-700: #3e4da7;
+  --color-blue-800: #333f87;
+  --color-blue-900: #2c3670;
+  --color-blue-950: #1c2247;
+
+  --text-3xs: 0.9375rem;
+  --text-3xs--line-height: 1.25rem;
+  --text-2xs: 1.21875rem;
+  --text-2xs--line-height: 1.6875rem;
+  --text-xs: 1.3125rem;
+  --text-xs--line-height: 2.0625rem;
+  --text-sm: 1.5rem;
+  --text-sm--line-height: 2.4rem;
+  --text-base: 1.6875rem;
+  --text-base--line-height: 2.625rem;
+  --text-lg: 1.875rem;
+  --text-lg--line-height: 2.8125rem;
+  --text-xl: 2.25rem;
+  --text-xl--line-height: 3rem;
+  --text-2xl: 2.625rem;
+  --text-2xl--line-height: 3.375rem;
+  --text-3xl: 3.1875rem;
+  --text-3xl--line-height: 3.75rem;
+  --text-4xl: 3.75rem;
+  --text-4xl--line-height: 4.125rem;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tailwind v4 ไม่ auto-derive utility class ให้ theme key ที่ชื่อขึ้นต้นด้วยตัวเลข (เช่น "2xs"/"3xs")
+   ทำให้ text-2xs/text-3xs ไม่มี CSS rule จริงมาตลอด (ตัวแปร --text-2xs/--text-3xs ถูกประกาศ แต่ไม่มี .text-2xs/.text-3xs)
+   ต้องประกาศ utility ตรงๆด้วย @utility เพื่อให้ทุกหน้าที่ใช้ text-2xs/text-3xs render ขนาดตัวอักษรถูกต้องจริง */
+@utility text-3xs {
+  font-size: var(--text-3xs);
+  line-height: var(--text-3xs--line-height);
+}
+@utility text-2xs {
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
+}
