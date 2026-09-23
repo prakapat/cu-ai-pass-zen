@@ -1,0 +1,11 @@
+-- AlterTable
+ALTER TABLE `User` ADD COLUMN `academicTitle1` VARCHAR(191) NULL,
+    ADD COLUMN `academicTitle2` VARCHAR(191) NULL,
+    ADD COLUMN `birthDate` DATE NULL,
+    ADD COLUMN `fullNameEn` VARCHAR(191) NULL,
+    ADD COLUMN `gender` ENUM('MALE', 'FEMALE') NULL,
+    ADD COLUMN `maritalStatus` ENUM('SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED') NULL,
+    ADD COLUMN `militaryRank` VARCHAR(191) NULL,
+    ADD COLUMN `otherPrefix` VARCHAR(191) NULL,
+    ADD COLUMN `royalTitle` VARCHAR(191) NULL,
+    ADD COLUMN `titlePrefix` VARCHAR(191) NULL;

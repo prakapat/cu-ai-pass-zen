@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `TripPlan` ADD COLUMN `reimbursementMode` ENUM('LUMP_SUM', 'ITEMIZED') NOT NULL DEFAULT 'ITEMIZED';

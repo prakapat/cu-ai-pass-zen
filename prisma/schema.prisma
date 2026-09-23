@@ -1,0 +1,489 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum TripStatus {
+  A1_DRAFT
+  A2_SEARCHING
+  A3_MEMO_DRAFTED
+  A3_A4_WAITING_SIGNATURE
+  A4_EPAYMENT_PREP
+  A4_EXPORTED
+  FIORI_PENDING
+  WAITING_CASH_ADVANCE
+  A5_UPLOADING_RECEIPTS
+  TRIP_CLEARED
+}
+
+enum PaymentMethod {
+  credit
+  cash
+  advance
+}
+
+// วิธีจ่ายเงินต่อรายการใน F12 (บันทึกยืมรองจ่าย) — ตัดตัวเลือก "เช็ค" ออก เพราะฟอร์มจริงมีแต่ไม่ได้ใช้งานจริงในระบบ
+enum EPaymentChannelType {
+  TRANSFER
+  CREDIT_CARD
+}
+
+// ระดับตำแหน่งตามข้อ 46-47 ของประกาศจุฬาฯ เรื่องเกณฑ์และอัตราการจ่ายเงินฯ พ.ศ. 2563
+// TIER1 = นายกสภา/กรรมการสภา/อธิการบดี/รองอธิการบดี/หัวหน้าส่วนงาน(รักษาการ)/ศาสตราจารย์/รองศาสตราจารย์/พนักงานมหาวิทยาลัยระดับ P1-P3
+// TIER2 = ผู้ช่วยศาสตราจารย์/อาจารย์/พนักงานมหาวิทยาลัยระดับ P4-P9
+// หมายเหตุ: นี่คือ 2 ระดับจริงตามระเบียบ ไม่ใช่ rank 3 ระดับ (Executive/Senior Staff/Staff) ที่ frontend ใช้แสดงผลอยู่ตอนนี้ -
+// ผู้ช่วยศาสตราจารย์ถูกจัดเป็น "Senior Staff" ในโค้ดเดิม แต่ตามระเบียบจริงอยู่ TIER2 ไม่ใช่ TIER1 เหมือนรองศาสตราจารย์
+enum RegulationTier {
+  TIER1
+  TIER2
+}
+
+enum AttachmentType {
+  INVITATION_LETTER
+  SIGNED_MEMO
+  RECEIPT
+  OTHER
+}
+
+enum TripType {
+  DOMESTIC
+  INTERNATIONAL
+}
+
+// รูปแบบการเบิก: เหมาจ่ายรวม (ข้อ 42 ในประเทศ / ข้อ 46 ต่างประเทศ) vs แยกเบิกที่พักตามจริง+เบี้ยเลี้ยงเหมาจ่าย (ข้อ 43 ในประเทศ / ข้อ 47 ต่างประเทศ)
+enum ReimbursementMode {
+  LUMP_SUM
+  ITEMIZED
+}
+
+// ระดับตำแหน่งตามข้อ 42 และ 43(1) ของประกาศฯ (การเดินทางในประเทศ) — 4 ระดับ
+// ต่างจาก TIER1/TIER2 ของข้อ 46/47 (ต่างประเทศ) ซึ่งจัดกลุ่มตำแหน่งไม่เหมือนกัน
+enum DomesticTier {
+  TIER1 // นายกสภา/กรรมการสภา/อธิการบดี/รองอธิการบดี/หัวหน้าส่วนงาน(รักษาการ)/ศาสตราจารย์
+  TIER2 // รองศาสตราจารย์/ผู้ช่วยศาสตราจารย์/พนักงานมหาวิทยาลัยระดับ P1-P4
+  TIER3 // อาจารย์/พนักงานมหาวิทยาลัยระดับ P5-P7
+  TIER4 // กรณีอื่น
+}
+
+// ระดับตำแหน่งตามข้อ 43(2) ของประกาศฯ (เบี้ยเลี้ยงในประเทศแยกรายการ) — 2 ระดับ จัดกลุ่มต่างจาก DomesticTier ข้างบน
+enum DomesticPerDiemTier {
+  TIER_A // นายกสภา ... ถึง อาจารย์/พนักงานมหาวิทยาลัยระดับ P1-P7 (แทบทุกตำแหน่ง)
+  TIER_B // กรณีอื่น
+}
+
+// ระดับแผนประกันเดินทางประมาณการ (ไม่ใช่ tier ตามระเบียบ — เป็น rule ประมาณการเบี้ยประกันที่ผู้ใช้ออกแบบเอง 2569-08-11)
+enum InsurancePlan {
+  ECONOMY // วงเงินหลักแสน เน้นประหยัด
+  STANDARD // วงเงิน 1-1.5 ล้านบาท ผ่านเกณฑ์วีซ่าเชงเกนขั้นต่ำ
+  PREMIUM // วงเงิน 3-5 ล้านบาท คุ้มครองครอบคลุมทรัพย์สิน/ไฟลท์ดีเลย์ — ค่าเริ่มต้น
+}
+
+// ประเภทข้อกำหนดวีซ่าสำหรับผู้ถือหนังสือเดินทางราชการไทย (ตรวจสอบจากข้อตกลงยกเว้นวีซ่าทวิภาคีจริงของกระทรวงการต่างประเทศ 2569-08-11)
+// ไม่ใช่ VISA_REQUIRED_COUNTRIES เดิมใน types.ts ซึ่งมีแค่ 8 ประเทศแบบ manual — ตารางนี้ครบ 186 ประเทศและใช้สิทธิ์แบบราชการ (มักได้ยกเว้นมากกว่าหนังสือเดินทางธรรมดา)
+enum VisaRequirement {
+  VISA_FREE // ไม่ต้องขอวีซ่า
+  VISA_ON_ARRIVAL // ขอวีซ่าที่ด่านตรวจคนเข้าเมือง
+  E_VISA // ยื่นออนไลน์ล่วงหน้า
+  EMBASSY_VISA // ยื่นผ่านสถานทูต/สถานกงสุล — ค่าธรรมเนียมสูงสุดและใช้เวลานานสุด
+}
+
+enum FlightScope {
+  DOMESTIC
+  INTERNATIONAL
+}
+
+// REQUESTER = ผู้เดินทาง/ผู้ขอ จัดการทริปของตัวเองผ่าน A1/A2/A3/A5
+// FINANCE_OFFICER = เจ้าหน้าที่การเงิน จัดการ A4/A5 ของทุกทริป
+// APPROVER = ดูภาพรวมทุกทริปได้ (read-only) ยังไม่มีปุ่ม "อนุมัติ" แยกในระบบตอนนี้ (การเซ็นอนุมัติทำนอกระบบ)
+// ADMIN = เข้าถึงได้ทุกอย่าง
+enum UserRole {
+  REQUESTER
+  APPROVER
+  FINANCE_OFFICER
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+// ข้อมูลส่วนบุคคลเพิ่มเติมตามแบบฟอร์มประวัติบุคลากรของมหาวิทยาลัย (คำนำหน้าชื่อ/ยศ/ราชทินนาม ฯลฯ)
+// ทุก field เป็น optional เพราะไม่ใช่ทุกคนจะมีข้อมูลครบ (เช่น ยศทหาร/ราชทินนามมีเฉพาะบางคน)
+// หมายเหตุ: ไม่เก็บ "อายุ" เป็น field ตรงๆ เพราะคำนวณจาก birthDate ได้เสมอ เก็บไว้จะข้อมูลเก่าไม่ตรงความจริงเมื่อเวลาผ่านไป
+model User {
+  id                  String         @id @default(cuid())
+  username            String         @unique
+  passwordHash        String
+  titlePrefix         String? // คำนำหน้าชื่อ เช่น นาย/นาง/นางสาว
+  firstName           String
+  lastName            String
+  fullNameEn          String? // ชื่อ-นามสกุล ภาษาอังกฤษ เช่น "MR. SOMCHAI RUKDEE"
+  gender              Gender?
+  birthDate           DateTime?      @db.Date
+  maritalStatus       MaritalStatus?
+  academicTitle1      String? // คำนำหน้าทางวิชาการ/วิชาชีพ (1) เช่น ศ., รศ., ผศ.
+  academicTitle2      String? // คำนำหน้าทางวิชาการ/วิชาชีพ (2)
+  militaryRank        String? // ยศทางทหาร
+  otherPrefix         String? // คำนำหน้าอื่น เช่น ดร.
+  royalTitle          String? // ราชทินนาม
+  role                UserRole       @default(REQUESTER)
+  createdAt           DateTime       @default(now())
+  // สรุปบริบทงานที่กำลังทำอยู่กับ AI Agent (ไม่เกิน 200 ตัวอักษร) — อัปเดตทุกครั้งที่ chat โดย Gemini เอง (piggyback บน response เดิม ไม่เรียก API เพิ่ม)
+  // ใช้ให้ AI นึกออกว่าทำอะไรอยู่ต่อได้ แม้ history ฝั่ง client จะถูกล้างไปแล้ว (idle timeout 5 นาที)
+  agentContextSummary String?        @db.VarChar(200)
+
+  // ป้องกันการอัปโหลดเอกสารที่ไม่เกี่ยวข้องซ้ำๆ (หน้าอัปโหลดเอกสารเริ่มต้น)
+  // irrelevantUploadStreak: นับต่อเนื่อง รีเซ็ตเป็น 0 ทุกครั้งที่ pageLockedUntil ครบเวลา — ใช้ตัดสิน lock หน้า 10 นาทีที่ครบ 5 ครั้ง
+  // irrelevantUploadTotal: นับสะสมตลอดไป ไม่รีเซ็ตอัตโนมัติ — ใช้ตัดสิน lock ทุกฟีเจอร์ AI ที่ครบ 30 ครั้ง (รีเซ็ตได้เฉพาะ admin ปลดล็อคเท่านั้น)
+  irrelevantUploadStreak Int       @default(0)
+  irrelevantUploadTotal  Int       @default(0)
+  pageLockedUntil        DateTime?
+  accountAiLocked        Boolean   @default(false)
+
+  trips        TripPlan[]
+  bankAccounts UserBankAccount[]
+}
+
+// บัญชีธนาคารของผู้ใช้สำหรับรับเงินยืมรองจ่าย (F12) — เก็บได้หลายบัญชี เลือกบัญชี default ไว้ได้ 1 บัญชี
+model UserBankAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  bankName      String
+  accountNumber String
+  branch        String
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channels EPaymentF12Channel[]
+
+  @@index([userId])
+}
+
+// หนึ่งแถวต่อหนึ่งคำขอเดินทาง (TripPlan ฝั่ง frontend)
+// โครงสร้างย่อยที่ผูกกับฟอร์ม UI โดยตรง (ผู้เดินทาง, ตัวเลือกตั๋ว/ประกัน, ร่างบันทึก ฯลฯ)
+// เก็บเป็น Json เพราะยังไม่มีความจำเป็นต้อง query ข้ามทริป — ถ้าอนาคตต้องทำรายงานข้าม trip
+// (เช่น สรุป GL code รวมทั้งมหาวิทยาลัย) ค่อยแยกเป็นตารางจริงตอนนั้น
+model TripPlan {
+  id                  String            @id @default(cuid())
+  requesterId         String?
+  tripType            TripType          @default(INTERNATIONAL)
+  reimbursementMode   ReimbursementMode @default(ITEMIZED)
+  insurancePlanTier   InsurancePlan     @default(PREMIUM)
+  projectName         String            @db.Text // ชื่องานประชุมวิชาการภาษาไทยแบบเป็นทางการมักยาวเกิน VARCHAR(191) ทั่วไป
+  conferenceStartDate String?
+  conferenceEndDate   String?
+  startDate           String
+  endDate             String
+  hasPersonalLeave    Boolean           @default(false)
+  leaveStartDate      String?
+  leaveEndDate        String?
+  location            String            @db.Text
+  country             String? // ต่างประเทศเท่านั้น (tripType=INTERNATIONAL)
+  countryGroup        Int? // ต่างประเทศเท่านั้น (tripType=INTERNATIONAL)
+  destinationProvince String? // ในประเทศเท่านั้น (tripType=DOMESTIC) — ข้อ 42-45 ไม่มีอัตราแยกตามจังหวัด ใช้เพื่อแสดงผลเท่านั้น
+  hostOrganization    String            @db.Text
+  budgetCode          String
+  paymentMethod       PaymentMethod     @default(advance)
+  estimatedBudget     Int               @default(0)
+  status              TripStatus        @default(A1_DRAFT)
+  isCancelled         Boolean           @default(false)
+
+  travelers          Json
+  itemPaymentMethods Json?
+  customBudgetItems  Json?
+  aiDetectedExpenses Json? // ค่าใช้จ่ายเพิ่มเติมที่ AI ตรวจพบจากเอกสารเชิญ (เช่น ค่าลงทะเบียน) — เติมสรุปงบประมาณครั้งแรกเท่านั้น
+  originCity         String? // "กรุงเทพฯ, ประเทศไทย" เสมอ — เก็บไว้เพื่อไม่ต้องเรียก AI ซ้ำตอนกลับมาดู A2
+  destinationCity    String? // เมือง+ประเทศปลายทางที่ AI ระบุจากสถานที่จัดงาน (A2) — แทนที่อยู่เต็มของ location ตอนแสดงผล
+  flightOptions      Json?
+  selectedFlight     Json?
+  insuranceOptions   Json?
+  selectedInsurance  Json?
+  memo               Json?
+  ePaymentData       Json?
+  receipts           Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attachments Attachment[]
+  requester   User?               @relation(fields: [requesterId], references: [id])
+  ePaymentF12 EPaymentF12Request?
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([requesterId])
+}
+
+// F12 (แบบฟอร์มบันทึกยืมรองจ่าย) ต่อคำขอเดินทาง 1 รายการ — ฟิลด์ตรงตามฟอร์มจริงของระบบ CU E-Payment
+// แยกเป็นตารางจริง (ไม่ใช้ ePaymentData Json เดิม) เพราะต้องกรอก/แก้ไขเป็นรายฟิลด์ก่อนส่งเข้าระบบปลายทาง
+// หมายเหตุ: ยังไม่ผูก UI/แหล่งข้อมูล — field ไหนยังไม่ชัดว่าจะดึงจากไหนให้เป็น optional ไปก่อน รอออกแบบการนำเข้าข้อมูลอีกที
+model EPaymentF12Request {
+  id     String @id @default(cuid())
+  tripId String @unique
+
+  // กลุ่ม A: หัวเอกสาร/บันทึกขออนุมัติ
+  deptCode         String? // รหัสส่วนงาน เช่น "0100"
+  deptName         String? // ชื่อส่วนงาน เช่น "สำนักงานมหาวิทยาลัย"
+  subject          String? @db.Text // เรื่อง
+  recipientTitle   String? // เรียน เช่น "รองอธิการบดี"
+  authorizedPerson String? // ผู้มีอำนาจอนุมัติจ่ายเงิน
+  description      String? @db.Text // คำอธิบายรายการ (ขอเบิก)
+  borrowerName     String? // ชื่อผู้ยืมรองจ่าย — อาจเป็นผู้เดินทางเองหรือเจ้าหน้าที่การเงินก็ได้ กรอกอิสระไม่ผูกกับ travelers
+  borrowerPosition String? // ตำแหน่งผู้ยืมรองจ่าย
+
+  // กลุ่ม B: งบประมาณ/บัญชี
+  fiscalYear      String? // ปีบัญชี (พ.ศ.)
+  loanPurpose     String? @db.Text // วัตถุประสงค์ยืมรองจ่าย
+  fundCode        String? // รหัสกองทุน/เงินทุน
+  fundName        String? // ชื่อกองทุน/เงินทุน
+  unitName        String? // หน่วยงาน
+  returnDueDate   String? // กำหนดส่งคืนเงินยืม
+  totalLoanAmount Int? // จำนวนเงินยืมทั้งหมด
+  notes           String? @db.Text // หมายเหตุ
+
+  // กลุ่ม D: ยืนยัน
+  refundOverpaymentConsent Boolean   @default(false) // user ติ๊กยินยอมคืนเงินส่วนเกินงบที่ได้รับอนุมัติ
+  confirmedAt              DateTime? // เวลาที่ user กดยืนยันฟอร์มนี้ — ใช้เป็นหลักฐานย้อนหลังว่ายอมรับแล้ว
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trip     TripPlan             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  channels EPaymentF12Channel[]
+}
+
+// กลุ่ม C: ช่องทางจ่ายเงินของ F12 — 1 คำขอมีได้หลายรายการ มาจากรายการที่ user ตั้งค่าไว้ใน A1 (itemPaymentMethods/customBudgetItems)
+model EPaymentF12Channel {
+  id          String              @id @default(cuid())
+  requestId   String
+  channelType EPaymentChannelType
+  amount      Int
+  sourceLabel String? // รายการต้นทางจาก A1 เช่น "ค่าตั๋วเครื่องบิน", "ค่าที่พัก" ไว้ตรวจสอบย้อนกลับ
+
+  // TRANSFER
+  recipientName     String? // Vendor / ผู้รับเงิน
+  bankAccountId     String? // อ้างอิงบัญชีที่เลือกจากโปรไฟล์ user (ถ้าเลือกจากโปรไฟล์)
+  bankName          String? // snapshot ค่าจาก UserBankAccount ตอนสร้างรายการ กันข้อมูลเปลี่ยนย้อนหลังถ้า user แก้โปรไฟล์ทีหลัง
+  bankAccountNumber String?
+  bankBranch        String?
+
+  // CREDIT_CARD
+  cardNumber     String? // เก็บเลขเต็มตามที่ยืนยันแล้ว
+  cardHolderName String?
+  cardValidFrom  String?
+  cardValidTo    String?
+  cardType       String?
+
+  createdAt DateTime @default(now())
+
+  request     EPaymentF12Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  bankAccount UserBankAccount?   @relation(fields: [bankAccountId], references: [id])
+
+  @@index([requestId])
+}
+
+// ไฟล์ต้นฉบับที่อัปโหลดเข้าระบบ (หนังสือเชิญ, บันทึกที่เซ็นแล้ว, ใบเสร็จ) เก็บตัวไฟล์จริงลง DB โดยตรง (LONGBLOB)
+// ใช้ต่อในการออกบันทึกข้อความ/อ้างอิงย้อนหลัง ไม่ใช่แค่ผลลัพธ์ OCR ที่ทิ้งไปหลังเรียก AI เหมือนเดิม
+model Attachment {
+  id        String         @id @default(cuid())
+  tripId    String
+  type      AttachmentType
+  fileName  String
+  mimeType  String
+  fileData  Bytes
+  ocrData   Json? // ผลลัพธ์ที่ Gemini สกัดได้จากไฟล์นี้ตอนอัปโหลด (audit trail)
+  createdAt DateTime       @default(now())
+
+  trip TripPlan @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+
+// อัตราเบิกจ่ายเดินทางต่างประเทศตามข้อ 46 (เหมาจ่ายรวม) และข้อ 47 (แยกรายการ) ของประกาศฯ พ.ศ. 2563
+// countryGroup: 1-5 ตามบัญชีท้ายประกาศ (ข้อ 46/47)
+model PolicyRate {
+  id               String         @id @default(cuid())
+  tier             RegulationTier
+  countryGroup     Int
+  perDiemLumpSum   Int // ข้อ 46: อัตราเหมาจ่ายรวม (ที่พัก+เบี้ยเลี้ยง+ค่าใช้จ่ายอื่น) ต่อวัน
+  accommodationMax Int // ข้อ 47(1): ค่าที่พักสูงสุดต่อวัน กรณีเบิกค่าที่พักตามที่จ่ายจริงแยกรายการ
+  perDiemItemized  Int // ข้อ 47(2): ค่าเบี้ยเลี้ยงเหมาจ่ายต่อวัน กรณีเบิกแยกรายการ (อัตราเดียวทุกกลุ่มประเทศ ไม่แปรตาม countryGroup)
+  effectiveYear    Int            @default(2563) // พ.ศ. ที่ประกาศมีผล
+
+  @@unique([tier, countryGroup, effectiveYear])
+}
+
+// รหัสบัญชีแยกประเภท (GL Code) สำหรับจับคู่รายการค่าใช้จ่ายกับระบบ e-Payment/SAP Fiori
+model GLCode {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+}
+
+// ตารางกลุ่มประเทศตามบัญชีท้ายประกาศฯ (ข้อ 46 และข้อ 47) — ประเทศที่ไม่มีในตารางนี้ถือเป็นกลุ่มที่ 5 โดยปริยาย
+model CountryGroup {
+  id      String @id @default(cuid())
+  country String @unique
+  group   Int
+
+  // ข้อ 49: จำนวนวันที่เดินทางล่วงหน้า/กลับหลังได้ ตามทวีปปลายทาง (เอเชีย=1, ออสเตรเลีย/นิวซีแลนด์/ยุโรป/อเมริกาเหนือ=2, อเมริกาใต้/แอฟริกา=3)
+  // ประเทศที่ไม่มีในตารางนี้ default เป็น 1 วัน (ถือเป็นกลุ่มเอเชียโดยปริยาย เช่นเดียวกับ group ด้านบน)
+  travelBufferDays Int @default(1)
+
+  // ค่าตั๋วเครื่องบินไป-กลับประมาณการต่อคน (บาท) — ไม่ใช่อัตราตามระเบียบ เป็นค่าประมาณการอ้างอิงราคาตลาดจริงตามภูมิภาค/ระยะทางจากกรุงเทพฯ
+  // ใช้แทนค่า hardcode เดิม (฿20,000 คงที่ทุกประเทศ) ใน A1's buildDefaultBudgetItems — ประเทศที่ไม่มีในตารางนี้ใช้ค่า default ใน frontend แทน
+  estimatedFlightCost Int?
+
+  // โซนความเสี่ยง/ค่ารักษาพยาบาลสำหรับประมาณการเบี้ยประกันเดินทาง (1-4) — อ้างอิง InsuranceZoneRate.zone
+  // เป็นการจัดกลุ่มคนละเกณฑ์กับ group ด้านบน (group=ตามระเบียบเบี้ยเลี้ยง, insuranceZone=ตามความเสี่ยง/ค่ารักษา) แม้บางประเทศจะตกกลุ่มเดียวกันโดยบังเอิญ
+  insuranceZone Int?
+
+  // ข้อกำหนดวีซ่า + ค่าธรรมเนียมประมาณการสำหรับหนังสือเดินทางราชการไทย — คนละเกณฑ์กับ group/insuranceZone ข้างต้นอีกเช่นกัน
+  visaRequirement  VisaRequirement?
+  estimatedVisaFee Int?
+}
+
+// โซนความเสี่ยงประกันเดินทาง 1-4 ตาม CountryGroup.insuranceZone — ตัวคูณราคาฐานตามช่วงวัน (ไม่ใช่อัตราตามระเบียบ เป็น rule ประมาณการ)
+model InsuranceZoneRate {
+  id         String @id @default(cuid())
+  zone       Int    @unique
+  label      String
+  multiplier Float
+}
+
+// ราคาฐานเบี้ยประกันตามช่วงวันเดินทาง (ไม่คิดเป็นเส้นตรงรายวัน แต่คิดเป็นช่วง) — ไม่ใช่อัตราตามระเบียบ เป็น rule ประมาณการ
+// แถวสุดท้าย (maxDays = null) คือช่วง "ยาวพิเศษ" เกิน 31 วัน: total = basePrice + ceil((days - minDays + 1) / extensionIncrementDays) * extensionIncrementAmount
+model InsuranceDurationTier {
+  id                       String @id @default(cuid())
+  minDays                  Int
+  maxDays                  Int? // null = ไม่มีเพดานบน
+  basePrice                Int
+  extensionIncrementDays   Int? // เฉพาะแถว maxDays = null
+  extensionIncrementAmount Int? // เฉพาะแถว maxDays = null
+  sortOrder                Int    @default(0)
+}
+
+// ระดับแผนความคุ้มครองประกันเดินทาง — ตัวคูณราคาสุดท้าย (ไม่ใช่อัตราตามระเบียบ เป็น rule ประมาณการ)
+model InsurancePlanTier {
+  id                  String        @id @default(cuid())
+  tier                InsurancePlan @unique
+  label               String
+  multiplier          Float
+  coverageDescription String
+  sortOrder           Int           @default(0)
+}
+
+// ข้อ 42: ค่าที่พักเหมาจ่ายรวมกับเบี้ยเลี้ยงและค่าใช้จ่ายอื่น (การเดินทางในประเทศ) ต่อคน/วัน
+model DomesticLumpSumRate {
+  id            String       @id @default(cuid())
+  tier          DomesticTier @unique
+  ratePerDay    Int
+  effectiveYear Int          @default(2563)
+}
+
+// ข้อ 43(1): ค่าที่พักตามที่จ่ายจริง (การเดินทางในประเทศ) แยกอัตราห้องเดี่ยว/ห้องคู่
+model DomesticAccommodationRate {
+  id            String       @id @default(cuid())
+  tier          DomesticTier @unique
+  singleRoomMax Int
+  twinRoomMax   Int
+  effectiveYear Int          @default(2563)
+}
+
+// ข้อ 43(2): ค่าเบี้ยเลี้ยงและค่าใช้จ่ายอื่นที่เกี่ยวข้องเหมาจ่าย (การเดินทางในประเทศ กรณีแยกรายการจากค่าที่พัก)
+model DomesticPerDiemRate {
+  id            String              @id @default(cuid())
+  tier          DomesticPerDiemTier @unique
+  ratePerDay    Int
+  effectiveYear Int                 @default(2563)
+}
+
+// ข้อ 44(4) [ในประเทศ] และข้อ 48(2) [ต่างประเทศ]: สิทธิ์ชั้นโดยสารเครื่องบินตามตำแหน่ง
+// ใช้แสดงคำเตือน/คำแนะนำเท่านั้น ไม่มีผลต่อยอดเงินประมาณการ (ค่าตั๋วเบิกตามที่จ่ายจริงเสมอ)
+model FlightClassRule {
+  id                      String      @id @default(cuid())
+  scope                   FlightScope
+  positionLabel           String // คำอธิบายกลุ่มตำแหน่งที่เข้าเกณฑ์นี้
+  maxClass                String // ชั้นโดยสารสูงสุดตามปกติ
+  exceptionMaxClass       String? // ชั้นที่ขยับขึ้นได้ถ้าเข้าเงื่อนไขพิเศษ (เฉพาะต่างประเทศ ข้อ 48(2)(ข)(ค))
+  exceptionThresholdHours Int? // จำนวนชั่วโมงบินขั้นต่ำที่ทำให้ใช้ exceptionMaxClass ได้ (เฉพาะต่างประเทศ)
+  sortOrder               Int         @default(0)
+
+  @@unique([scope, positionLabel])
+}
+
+// ค่าคงที่รายตัวจากระเบียบที่ config ได้ในฐานข้อมูล ไม่ผูกกับ tier/กลุ่มประเทศ
+// เช่น เพดานค่ารับรอง (ข้อ 50), อัตราชดเชยพาหนะส่วนตัว (ข้อ 44(3))
+model RegulationConstant {
+  id          String @id @default(cuid())
+  key         String @unique
+  value       Int
+  description String
+}
+
+// วันหยุดราชการ/นักขัตฤกษ์ไทย — ใช้ตอน A1 auto-detect ว่าวันเดินทางที่เกินสิทธิ์ข้อ 49 วันไหนเป็น "วันทำการ" ที่ต้องยื่นลาเพิ่มเติม
+// (ข้ามเสาร์-อาทิตย์และวันหยุดในตารางนี้ เพราะวันหยุดอยู่แล้วไม่ต้องลา) ต้องเพิ่มแถวใหม่ทุกปีเอง ไม่มีสูตรคำนวณอัตโนมัติ
+model PublicHoliday {
+  id          String   @id @default(cuid())
+  date        DateTime @unique @db.Date
+  description String
+}
+
+// ค่าตั้งค่าระบบที่ admin config ได้จากหน้า admin (เกณฑ์ lock/โควต้าการใช้งาน AI) — คนละส่วนกับ RegulationConstant ที่เป็นค่าคงที่จากตัวระเบียบ
+model SystemSetting {
+  key         String @id
+  value       Int
+  description String
+}
+
+// เลือก Gemini model ที่จะใช้ แยกเป็น 2 กลุ่ม: "agent" (Agent 1-5 ทั้งหมด + agent หลักของ chatbot)
+// กับ "intentClassifier" (ตัวกรองเช็ค on-topic ก่อนเข้า agent หลักของ chatbot) — key ตายตัว 2 แถวเท่านั้น ไม่มี prompt ในนี้
+// (prompt แก้ผ่านโค้ดโดยตรงเท่านั้น ดูสรุปได้ที่หน้า admin)
+model AiModelSetting {
+  key   String @id // "agent" | "intentClassifier"
+  value String
+}
+
+// คำถามแนะนำที่แสดงในหน้าเริ่มต้นของ chatbot (STARTER_QUESTIONS เดิม) — แก้ไข/เพิ่ม/ลบได้จากหน้า admin
+model GuideQuestion {
+  id        String @id @default(cuid())
+  text      String
+  sortOrder Int    @default(0)
+}
+
+// นับจำนวนครั้งที่ user แต่ละคนเรียก POST /api/agent/chat ในแต่ละเดือน (yearMonth = "YYYY-MM")
+// ใช้จำกัดโควต้าตาม SystemSetting key "monthlyChatLimit" — รีเซ็ตอัตโนมัติทุกเดือนเพราะ key เปลี่ยนตามเดือน ไม่ต้องมี job ล้างข้อมูล
+model ChatUsageMonthly {
+  id        String @id @default(cuid())
+  userId    String
+  yearMonth String
+  count     Int    @default(0)
+
+  @@unique([userId, yearMonth])
+}
+
+// เอกสารระเบียบต้นฉบับที่ตัดเป็นชิ้นๆ + embedding vector สำหรับ RAG ของ chatbot (phase 3)
+// ยังไม่มีข้อมูล — ผู้ใช้ยังไม่ได้ส่งเอกสารต้นฉบับมาให้ ตารางนี้เตรียมไว้รอ ingest เมื่อมีเอกสารจริง
+model RegulationDocumentChunk {
+  id         String   @id @default(cuid())
+  source     String // ชื่อไฟล์/เอกสารต้นฉบับ
+  chunkIndex Int
+  text       String   @db.Text
+  embedding  Json // vector จาก Gemini text-embedding-004 เก็บเป็น array of float
+  createdAt  DateTime @default(now())
+
+  @@index([source])
+}
