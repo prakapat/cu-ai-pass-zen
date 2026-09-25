@@ -605,10 +605,18 @@ export default function A1RegulationReader({
       const result = await res.json();
       setIsSimulated(!!result.simulated);
       if (result.success && result.data) {
-        applyParsedData(result.data);
+        if (result.data.documentType === 'IRRELEVANT') {
+          setError(t('a1.irrelevantDocument'));
+        } else {
+          setError(null);
+          applyParsedData(result.data);
+        }
+      } else {
+        setError(result.error || t('a1.parseFailedError'));
       }
     } catch (e) {
       console.error("Failed to extract invitation", e);
+      setError(t('a1.parseFailedError'));
     } finally {
       setLoading(false);
     }

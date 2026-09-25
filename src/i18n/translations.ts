@@ -234,6 +234,8 @@ export const translations: Record<string, { th: string; en: string }> = {
   'a1.saveAttachmentFailed': { th: 'บันทึกไฟล์แนบไม่สำเร็จ กรุณาลองใหม่', en: 'Could not save the attachment. Please try again.' },
   'a1.saveError': { th: 'เกิดข้อผิดพลาดขณะบันทึกข้อมูล กรุณาลองใหม่', en: 'An error occurred while saving. Please try again.' },
   'a1.confirmBeforeProceed': { th: 'กรุณากดยืนยันข้อมูลโครงการก่อนส่งต่อไปยัง Agent 2', en: 'Please confirm the project information before proceeding to Agent 2' },
+  'a1.irrelevantDocument': { th: 'AI ตรวจสอบแล้วว่าไฟล์ที่แนบไม่ใช่หนังสือเชิญ/เอกสารที่เกี่ยวข้องกับการเดินทาง กรุณาแนบไฟล์ให้ถูกต้อง หรือกรอกข้อมูลด้วยตนเอง', en: 'AI checked the attached file and it does not appear to be an invitation letter or travel-related document. Please attach the correct file, or fill in the fields manually.' },
+  'a1.parseFailedError': { th: 'ไม่สามารถอ่านข้อมูลจากไฟล์ที่แนบได้ กรุณาลองใหม่ หรือกรอกข้อมูลด้วยตนเอง', en: 'Could not read data from the attached file. Please try again, or fill in the fields manually.' },
 
   // ---------------- A2 travel search ----------------
   'a2.heading': { th: 'Agent 2: Travel Search (ค้นหาเที่ยวบิน & ประกันจริง)', en: 'Agent 2: Travel Search (Real Flights & Insurance)' },
